@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>التراجع عن التحديث - تحديث جماعي سلة</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .undo-center {
+      max-width: 560px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .undo-icon {
+      font-size: 72px;
+      display: block;
+      margin-bottom: 16px;
+    }
+    .undo-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--salla-secondary);
+      margin-bottom: 10px;
+    }
+    .undo-description {
+      font-size: 15px;
+      color: var(--salla-gray);
+      margin-bottom: 32px;
+      line-height: 1.7;
+    }
+    .undo-progress {
+      margin: 28px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div id="header-slot"></div>
+
+  <main class="main-content">
+    <div class="card">
+      <div class="undo-center">
+
+        <!-- Confirm State -->
+        <div id="confirmState">
+          <span class="undo-icon">↩️</span>
+          <div class="undo-title">التراجع عن آخر تحديث</div>
+          <p class="undo-description">
+            سيتم إعادة المنتجات إلى حالتها قبل التحديث الأخير.<br>
+            يشمل ذلك استعادة <strong>السعر القديم</strong> و<strong>الكمية القديمة</strong> لكل منتج.
+          </p>
+
+          <div class="alert alert-warning" style="text-align:right; margin-bottom: 24px;">
+            <span class="alert-icon">⚠️</span>
+            <div>هذا الإجراء لا يمكن التراجع عنه مرة أخرى. تأكد من صحة قرارك قبل المتابعة.</div>
+          </div>
+
+          <div style="display:flex; gap:12px; justify-content:center;">
+            <a href="/pages/results.html" class="btn btn-ghost btn-lg">إلغاء</a>
+            <button class="btn btn-danger btn-lg" id="undoBtn" onclick="startUndo()">
+              تنفيذ التراجع
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress State -->
+        <div id="progressState" style="display:none;">
+          <span class="undo-icon">🔄</span>
+          <div class="undo-title">جاري التراجع...</div>
+          <p class="undo-description">يتم إعادة المنتجات إلى قيمها السابقة. لا تغلق هذه الصفحة.</p>
+
+          <div class="undo-progress progress-container">
+            <div class="progress-label">
+              <span id="undoProgressText">0 من 0</span>
+              <span id="undoProgressPercent">0%</span>
+            </div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="undoProgressFill"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Done State -->
+        <div id="doneState" style="display:none;">
+          <span class="undo-icon" id="doneIcon">✅</span>
+          <div class="undo-title" id="doneTitle">تم التراجع بنجاح</div>
+          <p class="undo-description" id="doneMessage">تمت إعادة المنتجات إلى حالتها السابقة.</p>
+
+          <div style="display:flex; gap:12px; justify-content:center; margin-top:24px;">
+            <a href="/pages/history.html" class="btn btn-ghost btn-lg">السجل</a>
+            <a href="/pages/upload.html" class="btn btn-primary btn-lg">تحديث جديد</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+  document.getElementById('header-slot').innerHTML = App.header();
+
+  const jobId = App.load('undoJobId') || App.load('currentJobId');
+
+  if (!jobId) {
+    window.location.href = '/pages/history.html';
+  }
+
+  let eventSource = null;
+
+  async function startUndo() {
+    const btn = document.getElementById('undoBtn');
+    App.setButtonLoading(btn, true, 'جاري بدء التراجع...');
+
+    try {
+      const result = await App.api('POST', `/api/jobs/${jobId}/undo`);
+      const undoJobId = result.jobId;
+
+      document.getElementById('confirmState').style.display = 'none';
+      document.getElementById('progressState').style.display = 'block';
+
+      listenToProgress(undoJobId);
+    } catch (err) {
+      App.toast(err.message, 'error');
+      App.setButtonLoading(btn, false);
+    }
+  }
+
+  function listenToProgress(undoJobId) {
+    eventSource = new EventSource(`/api/jobs/${undoJobId}/progress`);
+
+    eventSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+
+      const total   = data.total || 1;
+      const done    = (data.updated || 0) + (data.failed || 0);
+      const percent = Math.round(done / total * 100);
+
+      document.getElementById('undoProgressFill').style.width = percent + '%';
+      document.getElementById('undoProgressText').textContent =
+        `${done.toLocaleString('ar-SA')} من ${total.toLocaleString('ar-SA')}`;
+      document.getElementById('undoProgressPercent').textContent = percent + '%';
+
+      if (data.status === 'completed' || data.status === 'failed') {
+        eventSource.close();
+        showDone(data);
+      }
+    };
+
+    eventSource.onerror = () => {
+      eventSource.close();
+      setTimeout(() => pollUndo(undoJobId), 2000);
+    };
+  }
+
+  async function pollUndo(undoJobId) {
+    try {
+      const data = await App.api('GET', `/api/jobs/${undoJobId}/status`);
+      const total   = data.total_rows || 1;
+      const done    = (data.updated || 0) + (data.failed || 0);
+      const percent = Math.round(done / total * 100);
+
+      document.getElementById('undoProgressFill').style.width = percent + '%';
+      document.getElementById('undoProgressText').textContent =
+        `${done.toLocaleString('ar-SA')} من ${total.toLocaleString('ar-SA')}`;
+      document.getElementById('undoProgressPercent').textContent = percent + '%';
+
+      if (data.status === 'completed' || data.status === 'failed') {
+        showDone(data);
+      } else {
+        setTimeout(() => pollUndo(undoJobId), 2000);
+      }
+    } catch {
+      setTimeout(() => pollUndo(undoJobId), 3000);
+    }
+  }
+
+  function showDone(data) {
+    document.getElementById('progressState').style.display = 'none';
+    document.getElementById('doneState').style.display = 'block';
+
+    const updated = data.updated || 0;
+    const failed  = data.failed  || 0;
+
+    if (failed > 0 && updated === 0) {
+      document.getElementById('doneIcon').textContent = '❌';
+      document.getElementById('doneTitle').textContent = 'فشل التراجع';
+      document.getElementById('doneMessage').textContent = 'لم يتم إعادة أي منتج. يرجى المحاولة مرة أخرى.';
+    } else {
+      document.getElementById('doneMessage').textContent =
+        `تمت إعادة ${updated.toLocaleString('ar-SA')} منتج إلى قيمها السابقة.${failed > 0 ? ` فشل ${failed.toLocaleString('ar-SA')} منتج.` : ''}`;
+    }
+  }
+</script>
+</body>
+</html>

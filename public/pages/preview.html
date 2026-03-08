@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>معاينة التغييرات - تحديث جماعي سلة</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .preview-table .row-will-update { background: #F0FDF4; }
+    .preview-table .row-no-change   { background: #FAFAFA; }
+    .preview-table .row-not-found   { background: #FEF2F2; }
+
+    .price-change {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .price-old { color: var(--salla-gray); text-decoration: line-through; font-size: 12px; }
+    .price-new { color: var(--salla-success); font-weight: 600; }
+    .price-arrow { color: var(--salla-gray); font-size: 12px; }
+    .price-same { color: var(--salla-gray); }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div id="header-slot"></div>
+
+  <main class="main-content">
+    <div id="stepper-slot"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <h1 class="card-title">معاينة التغييرات</h1>
+        <p class="card-subtitle">راجع التغييرات قبل التنفيذ. يتم عرض أول 50 منتج فقط في هذه الصفحة.</p>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid" id="statsGrid">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+        <a href="/api/products/preview/download" class="btn btn-ghost btn-sm" download>
+          📥 تحميل التقرير الكامل (CSV)
+        </a>
+      </div>
+
+      <!-- Preview Table -->
+      <div class="table-wrapper">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>SKU</th>
+              <th>اسم المنتج</th>
+              <th>السعر الحالي</th>
+              <th>السعر الجديد</th>
+              <th>الكمية الحالية</th>
+              <th>الكمية الجديدة</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="previewTableBody">
+            <tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">جاري التحميل...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="tableNote" style="font-size:12px; color:#64748B; margin-top:8px; text-align:center;"></div>
+
+      <!-- Footer Actions -->
+      <div class="footer-actions">
+        <a href="/pages/mapping.html" class="btn btn-ghost">
+          <span style="font-size:16px;">→</span>
+          رجوع
+        </a>
+        <button class="btn btn-success btn-lg" id="startBtn" onclick="startUpdate()">
+          🚀 ابدأ التحديث
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+  document.getElementById('header-slot').innerHTML = App.header();
+  document.getElementById('stepper-slot').innerHTML = App.stepper(3);
+
+  const previewData = App.load('previewData');
+
+  if (!previewData) {
+    window.location.href = '/pages/upload.html';
+  }
+
+  const { stats, previewItems } = previewData;
+
+  // Render stats
+  const statsGrid = document.getElementById('statsGrid');
+  statsGrid.innerHTML = `
+    <div class="stat-card">
+      <span class="stat-number">${(stats.totalRows || 0).toLocaleString('ar-SA')}</span>
+      <span class="stat-label">صف في الملف</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-number">${(stats.matched || 0).toLocaleString('ar-SA')}</span>
+      <span class="stat-label">منتج مطابق</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-number success">${(stats.willUpdate || 0).toLocaleString('ar-SA')}</span>
+      <span class="stat-label">سيتم تحديثه</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-number gray">${(stats.noChange || 0).toLocaleString('ar-SA')}</span>
+      <span class="stat-label">بدون تغيير</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-number danger">${(stats.notFound || 0).toLocaleString('ar-SA')}</span>
+      <span class="stat-label">SKU غير موجود</span>
+    </div>
+  `;
+
+  // Render table
+  const tbody = document.getElementById('previewTableBody');
+
+  if (!previewItems || previewItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+      <span class="empty-state-icon">📭</span>
+      <p class="empty-state-title">لا توجد بيانات للعرض</p>
+    </div></td></tr>`;
+  } else {
+    tbody.innerHTML = previewItems.map((item, i) => {
+      const rowClass = `row-${item.status}`;
+
+      const priceCell = renderValueCell(item.oldPrice, item.newPrice);
+      const qtyCell   = renderValueCell(item.oldQuantity, item.newQuantity, false);
+
+      return `
+        <tr class="${rowClass}">
+          <td style="color:#94A3B8; font-size:12px;">${i + 1}</td>
+          <td><code style="font-size:12px; background:#F1F5F9; padding:2px 6px; border-radius:4px;">${esc(item.sku)}</code></td>
+          <td>${item.productName === '-' ? '<span style="color:#94A3B8">—</span>' : esc(item.productName)}</td>
+          <td>${priceCell.old}</td>
+          <td>${priceCell.new}</td>
+          <td>${qtyCell.old}</td>
+          <td>${qtyCell.new}</td>
+          <td>${App.statusBadge(item.status)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    if (stats.totalRows > 50) {
+      document.getElementById('tableNote').textContent =
+        `يتم عرض أول 50 منتج فقط. التقرير الكامل يحتوي على ${stats.totalRows.toLocaleString('ar-SA')} صف.`;
+    }
+  }
+
+  function renderValueCell(oldVal, newVal, isPrice = true) {
+    const fmt = isPrice ? App.formatPrice : App.formatNumber;
+
+    if (oldVal === null && newVal === null) {
+      return { old: '<span style="color:#94A3B8">—</span>', new: '<span style="color:#94A3B8">—</span>' };
+    }
+
+    if (newVal === null || newVal === undefined) {
+      return { old: `<span class="price-same">${fmt(oldVal)}</span>`, new: '<span style="color:#94A3B8">—</span>' };
+    }
+
+    const changed = oldVal !== newVal && newVal !== null;
+
+    return {
+      old: oldVal !== null
+        ? (changed ? `<span class="price-old">${fmt(oldVal)}</span>` : `<span class="price-same">${fmt(oldVal)}</span>`)
+        : '<span style="color:#94A3B8">—</span>',
+      new: newVal !== null
+        ? (changed ? `<span class="price-new">${fmt(newVal)}</span>` : `<span class="price-same">${fmt(newVal)}</span>`)
+        : '<span style="color:#94A3B8">—</span>'
+    };
+  }
+
+  async function startUpdate() {
+    if (!stats.willUpdate || stats.willUpdate === 0) {
+      App.toast('لا توجد منتجات تحتاج إلى تحديث.', 'warning');
+      return;
+    }
+
+    const confirmed = confirm(
+      `هل أنت متأكد من تحديث ${stats.willUpdate.toLocaleString('ar-SA')} منتج؟\n\nسيتم حفظ نسخة احتياطية تسمح لك بالتراجع لاحقاً.`
+    );
+
+    if (!confirmed) return;
+
+    const btn = document.getElementById('startBtn');
+    App.setButtonLoading(btn, true, 'جاري بدء التحديث...');
+
+    try {
+      const result = await App.api('POST', '/api/jobs/start');
+      App.save('currentJobId', result.jobId);
+      window.location.href = '/pages/execute.html';
+    } catch (err) {
+      App.toast(err.message, 'error');
+      App.setButtonLoading(btn, false);
+    }
+  }
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+</script>
+</body>
+</html>

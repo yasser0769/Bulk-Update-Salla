@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نتائج التحديث - تحديث جماعي سلة</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="header-slot"></div>
+
+  <main class="main-content">
+    <div id="stepper-slot"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <h1 class="card-title" id="pageTitle">تم الانتهاء من التحديث</h1>
+        <p class="card-subtitle" id="pageSubtitle">فيما يلي ملخص عملية التحديث.</p>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <span class="stat-number"><span class="spinner spinner-primary"></span></span>
+          <span class="stat-label">جاري التحميل...</span>
+        </div>
+      </div>
+
+      <!-- Error Table (if any) -->
+      <div id="errorsSection" style="display:none;">
+        <hr class="section-divider">
+        <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; color: var(--salla-danger);">
+          ⚠️ المنتجات التي فشل تحديثها
+        </h3>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>اسم المنتج</th>
+                <th>السعر القديم</th>
+                <th>السعر المطلوب</th>
+                <th>الكمية القديمة</th>
+                <th>الكمية المطلوبة</th>
+                <th>سبب الفشل</th>
+              </tr>
+            </thead>
+            <tbody id="errorsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="footer-actions" style="margin-top:32px;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <button class="btn btn-ghost" id="downloadBtn" onclick="downloadResults()" disabled>
+            📥 تحميل تقرير النتائج
+          </button>
+          <button class="btn btn-danger" id="undoBtn" onclick="goToUndo()" disabled>
+            ↩️ التراجع عن التحديث
+          </button>
+        </div>
+        <a href="/pages/upload.html" class="btn btn-primary">
+          🔄 تحديث جديد
+        </a>
+      </div>
+
+      <div class="alert alert-info" style="margin-top:16px;">
+        <span class="alert-icon">💡</span>
+        <div>يمكنك مراجعة جميع العمليات السابقة من <a href="/pages/history.html" style="color:var(--salla-primary); font-weight:600;">صفحة السجل</a>.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+  document.getElementById('header-slot').innerHTML = App.header();
+  document.getElementById('stepper-slot').innerHTML = App.stepper(5);
+
+  const jobId = App.load('currentJobId');
+
+  if (!jobId) {
+    window.location.href = '/pages/history.html';
+  }
+
+  loadResults();
+
+  async function loadResults() {
+    try {
+      const data = await App.api('GET', `/api/jobs/${jobId}/status`);
+      renderResults(data);
+    } catch (err) {
+      document.getElementById('statsGrid').innerHTML =
+        `<div class="alert alert-danger"><span class="alert-icon">⚠️</span><div>${err.message}</div></div>`;
+    }
+  }
+
+  function renderResults(data) {
+    const updated = data.updated || 0;
+    const failed  = data.failed  || 0;
+    const total   = data.total_rows || 0;
+    const skipped = total - updated - failed;
+
+    // Page title based on outcome
+    if (data.status === 'completed' && failed === 0) {
+      document.getElementById('pageTitle').textContent = 'تم الانتهاء من التحديث بنجاح ✅';
+    } else if (failed > 0) {
+      document.getElementById('pageTitle').textContent = 'تم التحديث مع بعض الأخطاء ⚠️';
+    }
+
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-card">
+        <span class="stat-number success">${updated.toLocaleString('ar-SA')}</span>
+        <span class="stat-label">تم تحديثه بنجاح</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number danger">${failed.toLocaleString('ar-SA')}</span>
+        <span class="stat-label">فشل التحديث</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number gray">${Math.max(0, skipped).toLocaleString('ar-SA')}</span>
+        <span class="stat-label">تم تجاهله</span>
+      </div>
+    `;
+
+    // Enable buttons
+    document.getElementById('downloadBtn').disabled = false;
+    document.getElementById('undoBtn').disabled = (updated === 0);
+
+    // Error table
+    if (data.failedItems && data.failedItems.length > 0) {
+      document.getElementById('errorsSection').style.display = 'block';
+      document.getElementById('errorsTableBody').innerHTML = data.failedItems.map(item => `
+        <tr>
+          <td><code style="font-size:12px; background:#F1F5F9; padding:2px 6px; border-radius:4px;">${esc(item.sku)}</code></td>
+          <td>${esc(item.product_name || '-')}</td>
+          <td>${App.formatPrice(item.old_price)}</td>
+          <td>${App.formatPrice(item.new_price)}</td>
+          <td>${App.formatNumber(item.old_quantity)}</td>
+          <td>${App.formatNumber(item.new_quantity)}</td>
+          <td><span class="badge badge-danger">${esc(item.error_message || 'خطأ غير معروف')}</span></td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  function downloadResults() {
+    window.location.href = `/api/jobs/${jobId}/results/download`;
+  }
+
+  function goToUndo() {
+    App.save('undoJobId', jobId);
+    window.location.href = '/pages/undo.html';
+  }
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+</script>
+</body>
+</html>

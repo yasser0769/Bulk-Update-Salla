@@ -1,0 +1,25 @@
+{
+  "name": "تحديث جماعي للمنتجات",
+  "short_name": "Bulk Update",
+  "description": "تحديث أسعار وكميات آلاف المنتجات دفعة واحدة عبر ملف CSV أو Excel",
+  "version": "1.0.0",
+  "category": "products",
+  "permissions": [
+    "products.read",
+    "products.write"
+  ],
+  "oauth_scopes": [
+    "offline_access"
+  ],
+  "redirect_uri": "{APP_URL}/auth/callback",
+  "webhook_secret": "{SALLA_WEBHOOK_SECRET}",
+  "features": [
+    "رفع ملف CSV أو Excel",
+    "تحديد أعمدة SKU والسعر والكمية",
+    "معاينة التغييرات قبل التنفيذ",
+    "تحديث تدريجي مع احترام Rate Limits",
+    "حفظ Snapshot والتراجع عن التحديث",
+    "تقارير CSV قابلة للتحميل",
+    "سجل العمليات السابقة"
+  ]
+}

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تحديد الأعمدة - تحديث جماعي سلة</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="header-slot"></div>
+
+  <main class="main-content">
+    <div id="stepper-slot"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <h1 class="card-title">تحديد الأعمدة في الملف</h1>
+        <p class="card-subtitle">اختر العمود الذي يحتوي على كل نوع من بيانات المنتج.</p>
+      </div>
+
+      <!-- File summary -->
+      <div id="fileSummary" class="alert alert-info" style="margin-bottom:24px;">
+        <span class="alert-icon">📄</span>
+        <span id="fileSummaryText">جاري التحميل...</span>
+      </div>
+
+      <!-- Mapping Fields -->
+      <div class="mapping-grid" id="mappingGrid">
+        <!-- Will be rendered by JS -->
+      </div>
+
+      <div id="validationArea" style="margin-top: 16px;"></div>
+
+      <!-- Footer Actions -->
+      <div class="footer-actions">
+        <a href="/pages/upload.html" class="btn btn-ghost">
+          <span style="font-size:16px;">→</span>
+          رجوع
+        </a>
+        <button class="btn btn-primary btn-lg" id="nextBtn" onclick="goToPreview()">
+          التالي — معاينة التغييرات
+          <span style="font-size:16px;">←</span>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+  document.getElementById('header-slot').innerHTML = App.header();
+  document.getElementById('stepper-slot').innerHTML = App.stepper(2);
+
+  const fileData = App.load('fileData');
+
+  if (!fileData || !fileData.headers) {
+    window.location.href = '/pages/upload.html';
+  }
+
+  const { headers, sampleRow, totalRows, filename } = fileData;
+
+  // File summary
+  document.getElementById('fileSummaryText').textContent =
+    `الملف: ${filename} — ${totalRows.toLocaleString('ar-SA')} صف — ${headers.length} عمود`;
+
+  // Build mapping grid
+  const fields = [
+    {
+      key: 'skuCol',
+      label: 'SKU',
+      required: true,
+      icon: '🏷️',
+      iconClass: 'required-icon',
+      hint: 'رقم/كود المنتج الفريد (Stock Keeping Unit)',
+      placeholder: 'اختر عمود SKU'
+    },
+    {
+      key: 'priceCol',
+      label: 'السعر',
+      required: false,
+      icon: '💰',
+      iconClass: 'optional-icon',
+      hint: 'السعر الجديد للمنتج (رقم عشري)',
+      placeholder: 'اختر عمود السعر (اختياري)'
+    },
+    {
+      key: 'quantityCol',
+      label: 'الكمية',
+      required: false,
+      icon: '📦',
+      iconClass: 'optional-icon',
+      hint: 'الكمية الجديدة للمنتج (رقم صحيح)',
+      placeholder: 'اختر عمود الكمية (اختياري)'
+    }
+  ];
+
+  const grid = document.getElementById('mappingGrid');
+  grid.innerHTML = fields.map(field => `
+    <div class="mapping-field">
+      <div class="mapping-field-header">
+        <div class="mapping-field-icon ${field.iconClass}">${field.icon}</div>
+        <div>
+          <div class="mapping-field-title">
+            ${field.label}
+            ${field.required
+              ? '<span class="badge badge-danger" style="font-size:10px; margin-right:6px;">إجباري</span>'
+              : '<span class="badge badge-gray" style="font-size:10px; margin-right:6px;">اختياري</span>'
+            }
+          </div>
+        </div>
+      </div>
+
+      <select class="form-select" id="${field.key}" onchange="updateSample('${field.key}')">
+        <option value="">${field.placeholder}</option>
+        ${headers.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('')}
+      </select>
+
+      <div class="form-hint" id="${field.key}_hint">
+        ${field.hint}
+      </div>
+    </div>
+  `).join('');
+
+  // Auto-detect columns by common names
+  autoDetect();
+
+  function autoDetect() {
+    const skuKeywords = ['sku', 'رمز', 'كود', 'code', 'barcode', 'باركود', 'رقم'];
+    const priceKeywords = ['سعر', 'price', 'سعر البيع', 'cost', 'تكلفة'];
+    const qtyKeywords = ['كمية', 'quantity', 'qty', 'stock', 'مخزون', 'العدد'];
+
+    autoSelectField('skuCol', skuKeywords);
+    autoSelectField('priceCol', priceKeywords);
+    autoSelectField('quantityCol', qtyKeywords);
+  }
+
+  function autoSelectField(fieldId, keywords) {
+    const select = document.getElementById(fieldId);
+    for (const header of headers) {
+      const lower = header.toLowerCase();
+      if (keywords.some(kw => lower.includes(kw))) {
+        select.value = header;
+        updateSample(fieldId);
+        break;
+      }
+    }
+  }
+
+  function updateSample(fieldId) {
+    const select = document.getElementById(fieldId);
+    const hintEl = document.getElementById(fieldId + '_hint');
+    const col = select.value;
+
+    if (!col) {
+      const defaultHints = {
+        skuCol: 'رقم/كود المنتج الفريد (Stock Keeping Unit)',
+        priceCol: 'السعر الجديد للمنتج (رقم عشري)',
+        quantityCol: 'الكمية الجديدة للمنتج (رقم صحيح)'
+      };
+      hintEl.textContent = defaultHints[fieldId] || '';
+      return;
+    }
+
+    const sampleVal = sampleRow ? sampleRow[col] : null;
+    if (sampleVal !== null && sampleVal !== undefined && sampleVal !== '') {
+      hintEl.innerHTML = `<strong>مثال من بياناتك:</strong> ${escHtml(String(sampleVal))}`;
+    } else {
+      hintEl.textContent = 'لا توجد بيانات في الصف الأول لهذا العمود';
+    }
+  }
+
+  async function goToPreview() {
+    const skuCol = document.getElementById('skuCol').value;
+    const priceCol = document.getElementById('priceCol').value;
+    const quantityCol = document.getElementById('quantityCol').value;
+
+    // Validate
+    if (!skuCol) {
+      document.getElementById('validationArea').innerHTML =
+        '<div class="alert alert-danger"><span class="alert-icon">⚠️</span><div>يجب تحديد عمود SKU لمطابقة المنتجات.</div></div>';
+      return;
+    }
+
+    if (!priceCol && !quantityCol) {
+      document.getElementById('validationArea').innerHTML =
+        '<div class="alert alert-warning"><span class="alert-icon">⚠️</span><div>يجب اختيار عمود السعر أو الكمية أو كليهما.</div></div>';
+      return;
+    }
+
+    document.getElementById('validationArea').innerHTML = '';
+
+    const btn = document.getElementById('nextBtn');
+    App.setButtonLoading(btn, true, 'جاري تحليل الملف وجلب المنتجات...');
+
+    try {
+      const result = await App.api('POST', '/api/products/preview', {
+        skuCol, priceCol: priceCol || null, quantityCol: quantityCol || null
+      });
+
+      App.save('previewData', result);
+      App.save('mapping', { skuCol, priceCol, quantityCol });
+
+      window.location.href = '/pages/preview.html';
+    } catch (err) {
+      document.getElementById('validationArea').innerHTML =
+        `<div class="alert alert-danger"><span class="alert-icon">⚠️</span><div>${err.message}</div></div>`;
+      App.setButtonLoading(btn, false);
+    }
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>

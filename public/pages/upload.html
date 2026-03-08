@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>رفع الملف - تحديث جماعي سلة</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="header-slot"></div>
+
+  <main class="main-content">
+    <div id="stepper-slot"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <h1 class="card-title">تحديث المنتجات عبر ملف Excel أو CSV</h1>
+        <p class="card-subtitle">ارفع ملف يحتوي على SKU والسعر أو الكمية لتحديث المنتجات في متجرك بسرعة وسهولة.</p>
+      </div>
+
+      <!-- Upload Zone -->
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".csv,.xls,.xlsx">
+        <span class="upload-icon">📂</span>
+        <p class="upload-title">اسحب الملف هنا أو اضغط للاختيار</p>
+        <p class="upload-subtitle">يمكنك رفع ملف واحد بحجم أقصى 10 ميجابايت</p>
+        <div class="upload-formats">
+          <span class="format-badge">CSV</span>
+          <span class="format-badge">XLS</span>
+          <span class="format-badge">XLSX</span>
+        </div>
+      </div>
+
+      <!-- File Info (hidden until file selected) -->
+      <div class="file-info" id="fileInfo" style="display:none;">
+        <span class="file-info-icon" id="fileIcon">📄</span>
+        <div class="file-info-details">
+          <div class="file-info-name" id="fileName">-</div>
+          <div class="file-info-meta" id="fileMeta">-</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="removeFileBtn" onclick="removeFile()">إزالة</button>
+      </div>
+
+      <!-- Validation Messages -->
+      <div id="validationArea" style="margin-top: 16px;"></div>
+
+      <!-- SKU Tip -->
+      <div class="alert alert-info" style="margin-top: 16px;">
+        <span class="alert-icon">💡</span>
+        <div>يفضل أن يحتوي الملف على عمود <strong>SKU</strong> للمطابقة الدقيقة مع منتجات متجرك.</div>
+      </div>
+
+      <!-- Footer Actions -->
+      <div class="footer-actions">
+        <div></div>
+        <button class="btn btn-primary btn-lg" id="nextBtn" disabled onclick="goToMapping()">
+          التالي
+          <span style="font-size:16px;">←</span>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+  // Render header and stepper
+  document.getElementById('header-slot').innerHTML = App.header();
+  document.getElementById('stepper-slot').innerHTML = App.stepper(1);
+
+  const uploadZone = document.getElementById('uploadZone');
+  const fileInput  = document.getElementById('fileInput');
+  const nextBtn    = document.getElementById('nextBtn');
+  let currentFileData = null;
+
+  // Drag & Drop
+  uploadZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadZone.classList.add('dragover');
+  });
+
+  uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('dragover');
+  });
+
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  async function handleFile(file) {
+    clearValidation();
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['csv', 'xls', 'xlsx'].includes(ext)) {
+      showError('نوع الملف غير مدعوم. يرجى اختيار ملف CSV أو Excel.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showError('حجم الملف كبير جداً. الحد الأقصى هو 10 ميجابايت.');
+      return;
+    }
+
+    // Show uploading state
+    App.setButtonLoading(nextBtn, true, 'جاري رفع الملف...');
+    nextBtn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/products/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        showError(json.error || 'فشل رفع الملف.');
+        App.setButtonLoading(nextBtn, false);
+        return;
+      }
+
+      currentFileData = json;
+      App.save('fileData', json);
+
+      // Update UI
+      showFileInfo(file.name, json);
+      uploadZone.classList.add('has-file');
+      showSuccess(`تم رفع الملف بنجاح. تم اكتشاف ${json.totalRows.toLocaleString('ar-SA')} صف.`);
+      nextBtn.disabled = false;
+      App.setButtonLoading(nextBtn, false);
+
+    } catch (err) {
+      showError('حدث خطأ أثناء رفع الملف. تأكد من اتصالك بالإنترنت.');
+      App.setButtonLoading(nextBtn, false);
+    }
+  }
+
+  function showFileInfo(name, data) {
+    const icons = { CSV: '📋', XLS: '📊', XLSX: '📊' };
+    document.getElementById('fileIcon').textContent = icons[data.fileType] || '📄';
+    document.getElementById('fileName').textContent = name;
+    document.getElementById('fileMeta').textContent =
+      `${data.totalRows.toLocaleString('ar-SA')} صف • ${data.fileType} • ${data.headers.length} عمود`;
+    document.getElementById('fileInfo').style.display = 'flex';
+  }
+
+  function removeFile() {
+    currentFileData = null;
+    App.save('fileData', null);
+    fileInput.value = '';
+    document.getElementById('fileInfo').style.display = 'none';
+    uploadZone.classList.remove('has-file');
+    nextBtn.disabled = true;
+    clearValidation();
+  }
+
+  function goToMapping() {
+    if (!currentFileData) return;
+    window.location.href = '/pages/mapping.html';
+  }
+
+  function showError(msg) {
+    document.getElementById('validationArea').innerHTML =
+      `<div class="alert alert-danger"><span class="alert-icon">⚠️</span><div>${msg}</div></div>`;
+    nextBtn.disabled = true;
+    App.setButtonLoading(nextBtn, false);
+  }
+
+  function showSuccess(msg) {
+    document.getElementById('validationArea').innerHTML =
+      `<div class="alert alert-success"><span class="alert-icon">✅</span><div>${msg}</div></div>`;
+  }
+
+  function clearValidation() {
+    document.getElementById('validationArea').innerHTML = '';
+  }
+</script>
+</body>
+</html>

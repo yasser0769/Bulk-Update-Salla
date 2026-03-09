@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 
@@ -6,8 +7,55 @@ const { requireAuth } = require('../middleware/auth');
 const { getDB } = require('../services/database');
 const { updateProduct, sleep, RATE_LIMIT_DELAY } = require('../services/salla');
 
+const SALLA_TOKEN_URL = process.env.SALLA_TOKEN_URL || 'https://accounts.salla.sa/oauth2/token';
+const CLIENT_ID = process.env.SALLA_CLIENT_ID;
+const CLIENT_SECRET = process.env.SALLA_CLIENT_SECRET;
+
 // Active job tracking (in-memory for progress updates)
 const activeJobs = {};
+
+async function refreshAccessToken(refreshToken) {
+  const tokenResponse = await axios.post(
+    SALLA_TOKEN_URL,
+    new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      refresh_token: refreshToken
+    }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  );
+
+  const { access_token, refresh_token, expires_in } = tokenResponse.data;
+  return {
+    accessToken: access_token,
+    refreshToken: refresh_token || refreshToken,
+    tokenExpiry: Date.now() + (expires_in || 3600) * 1000
+  };
+}
+
+async function updateProductWithRetry(tokenState, productId, updates) {
+  try {
+    return await updateProduct(tokenState.accessToken, productId, updates);
+  } catch (err) {
+    const status = err.response?.status;
+
+    if (status === 401 && tokenState.refreshToken) {
+      const refreshed = await refreshAccessToken(tokenState.refreshToken);
+      tokenState.accessToken = refreshed.accessToken;
+      tokenState.refreshToken = refreshed.refreshToken;
+      tokenState.tokenExpiry = refreshed.tokenExpiry;
+      return await updateProduct(tokenState.accessToken, productId, updates);
+    }
+
+    if (status === 429) {
+      await sleep(2000);
+      return await updateProduct(tokenState.accessToken, productId, updates);
+    }
+
+    throw err;
+  }
+}
 
 // POST /api/jobs/start - Start update job
 router.post('/start', requireAuth, async (req, res) => {
@@ -25,7 +73,11 @@ router.post('/start', requireAuth, async (req, res) => {
 
   const jobId = uuidv4();
   const db = getDB();
-  const accessToken = req.session.accessToken;
+  const tokenState = {
+    accessToken: req.session.accessToken,
+    refreshToken: req.session.refreshToken,
+    tokenExpiry: req.session.tokenExpiry
+  };
 
   // Create job record
   db.prepare(`
@@ -71,7 +123,7 @@ router.post('/start', requireAuth, async (req, res) => {
   req.session.currentJobId = jobId;
 
   // Start processing in background
-  processJob(jobId, itemsToUpdate, accessToken);
+  processJob(jobId, itemsToUpdate, tokenState);
 
   res.json({ success: true, jobId, total: itemsToUpdate.length });
 });
@@ -175,7 +227,11 @@ router.post('/:id/undo', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'لا توجد بيانات للتراجع.' });
   }
 
-  const accessToken = req.session.accessToken;
+  const tokenState = {
+    accessToken: req.session.accessToken,
+    refreshToken: req.session.refreshToken,
+    tokenExpiry: req.session.tokenExpiry
+  };
   const undoJobId = uuidv4();
 
   db.prepare(`
@@ -193,7 +249,7 @@ router.post('/:id/undo', requireAuth, async (req, res) => {
   req.session.currentJobId = undoJobId;
 
   // Process undo in background
-  processUndo(undoJobId, snapshots, accessToken, db);
+  processUndo(undoJobId, snapshots, tokenState, db);
 
   res.json({ success: true, jobId: undoJobId, total: snapshots.length });
 });
@@ -235,7 +291,7 @@ router.get('/:id/results/download', requireAuth, (req, res) => {
 });
 
 // Background job processor
-async function processJob(jobId, items, accessToken) {
+async function processJob(jobId, items, tokenState) {
   const db = getDB();
   const updateItem = db.prepare(`
     UPDATE job_items SET status = ?, error_message = ? WHERE job_id = ? AND sku = ?
@@ -265,7 +321,7 @@ async function processJob(jobId, items, accessToken) {
         updates.quantity = item.newQuantity;
       }
 
-      await updateProduct(accessToken, item.productId, updates);
+      await updateProductWithRetry(tokenState, item.productId, updates);
       updateItem.run('updated', null, jobId, item.sku);
       updated++;
     } catch (err) {
@@ -289,7 +345,7 @@ async function processJob(jobId, items, accessToken) {
 }
 
 // Background undo processor
-async function processUndo(jobId, snapshots, accessToken, db) {
+async function processUndo(jobId, snapshots, tokenState, db) {
   const updateJob = db.prepare(`
     UPDATE jobs SET updated = ?, failed = ?, status = ?, completed_at = CURRENT_TIMESTAMP
     WHERE id = ?
@@ -315,9 +371,10 @@ async function processUndo(jobId, snapshots, accessToken, db) {
         updates.quantity = snapshot.old_quantity;
       }
 
-      await updateProduct(accessToken, snapshot.product_id, updates);
+      await updateProductWithRetry(tokenState, snapshot.product_id, updates);
       updated++;
-    } catch {
+    } catch (err) {
+      console.error('Undo item failed:', snapshot.sku, err.response?.data || err.message);
       failed++;
     }
 

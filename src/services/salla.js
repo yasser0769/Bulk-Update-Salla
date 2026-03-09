@@ -64,6 +64,16 @@ async function updateProduct(accessToken, productId, updates) {
   return response.data;
 }
 
+async function updateProductBySKU(accessToken, sku, updates) {
+  await sleep(RATE_LIMIT_DELAY);
+  const response = await axios.put(
+    `${SALLA_API_URL}/products/sku/${encodeURIComponent(sku)}`,
+    updates,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  return response.data;
+}
+
 async function getMerchantInfo(accessToken) {
   const response = await axios.get(`${SALLA_API_URL}/store/info`, {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -71,4 +81,4 @@ async function getMerchantInfo(accessToken) {
   return response.data.data;
 }
 
-module.exports = { getAllProducts, getProductBySKU, updateProduct, getMerchantInfo, sleep, RATE_LIMIT_DELAY };
+module.exports = { getAllProducts, getProductBySKU, updateProduct, updateProductBySKU, getMerchantInfo, sleep, RATE_LIMIT_DELAY };

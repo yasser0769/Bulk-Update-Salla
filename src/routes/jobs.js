@@ -5,7 +5,7 @@ const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
 const { getDB } = require('../services/database');
-const { updateProduct, sleep, RATE_LIMIT_DELAY } = require('../services/salla');
+const { updateProduct, updateProductBySKU, sleep, RATE_LIMIT_DELAY } = require('../services/salla');
 
 const SALLA_TOKEN_URL = process.env.SALLA_TOKEN_URL || 'https://accounts.salla.sa/oauth2/token';
 const CLIENT_ID = process.env.SALLA_CLIENT_ID;
@@ -34,9 +34,19 @@ async function refreshAccessToken(refreshToken) {
   };
 }
 
-async function updateProductWithRetry(tokenState, productId, updates) {
+async function updateProductWithRetry(tokenState, productId, sku, updates) {
+  const runUpdate = async () => {
+    if (productId) {
+      return updateProduct(tokenState.accessToken, productId, updates);
+    }
+    if (sku) {
+      return updateProductBySKU(tokenState.accessToken, sku, updates);
+    }
+    throw new Error('Missing product reference (product_id/sku)');
+  };
+
   try {
-    return await updateProduct(tokenState.accessToken, productId, updates);
+    return await runUpdate();
   } catch (err) {
     const status = err.response?.status;
 
@@ -45,16 +55,24 @@ async function updateProductWithRetry(tokenState, productId, updates) {
       tokenState.accessToken = refreshed.accessToken;
       tokenState.refreshToken = refreshed.refreshToken;
       tokenState.tokenExpiry = refreshed.tokenExpiry;
-      return await updateProduct(tokenState.accessToken, productId, updates);
+      return await runUpdate();
     }
 
     if (status === 429) {
       await sleep(2000);
-      return await updateProduct(tokenState.accessToken, productId, updates);
+      return await runUpdate();
     }
 
     throw err;
   }
+}
+
+function getErrorMessage(err) {
+  const payload = err.response?.data;
+  if (typeof payload === 'string' && payload.trim()) return payload;
+  if (payload?.message) return payload.message;
+  if (payload?.error) return payload.error;
+  return err.message || 'خطأ غير معروف';
 }
 
 // POST /api/jobs/start - Start update job
@@ -222,8 +240,18 @@ router.post('/:id/undo', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'العملية غير موجودة.' });
   }
 
-  const snapshots = db.prepare('SELECT * FROM snapshots WHERE job_id = ?').all(id);
-  if (snapshots.length === 0) {
+  const undoItems = db.prepare(`
+    SELECT
+      sku, product_id,
+      old_price, new_price,
+      old_sale_price, new_sale_price,
+      old_cost_price, new_cost_price,
+      old_quantity, new_quantity
+    FROM job_items
+    WHERE job_id = ?
+  `).all(id);
+
+  if (undoItems.length === 0) {
     return res.status(400).json({ error: 'لا توجد بيانات للتراجع.' });
   }
 
@@ -237,10 +265,10 @@ router.post('/:id/undo', requireAuth, async (req, res) => {
   db.prepare(`
     INSERT INTO jobs (id, filename, total_rows, status)
     VALUES (?, ?, ?, 'running')
-  `).run(undoJobId, `undo-${id}`, snapshots.length);
+  `).run(undoJobId, `undo-${id}`, undoItems.length);
 
   activeJobs[undoJobId] = {
-    total: snapshots.length,
+    total: undoItems.length,
     updated: 0,
     failed: 0,
     status: 'running'
@@ -249,9 +277,9 @@ router.post('/:id/undo', requireAuth, async (req, res) => {
   req.session.currentJobId = undoJobId;
 
   // Process undo in background
-  processUndo(undoJobId, snapshots, tokenState, db);
+  processUndo(undoJobId, undoItems, tokenState, db);
 
-  res.json({ success: true, jobId: undoJobId, total: snapshots.length });
+  res.json({ success: true, jobId: undoJobId, total: undoItems.length });
 });
 
 // GET /api/jobs/:id/results/download - Download results CSV
@@ -321,11 +349,11 @@ async function processJob(jobId, items, tokenState) {
         updates.quantity = item.newQuantity;
       }
 
-      await updateProductWithRetry(tokenState, item.productId, updates);
+      await updateProductWithRetry(tokenState, item.productId, item.sku, updates);
       updateItem.run('updated', null, jobId, item.sku);
       updated++;
     } catch (err) {
-      const errorMsg = err.response?.data?.message || err.message || 'خطأ غير معروف';
+      const errorMsg = getErrorMessage(err);
       updateItem.run('failed', errorMsg, jobId, item.sku);
       failed++;
     }
@@ -345,7 +373,7 @@ async function processJob(jobId, items, tokenState) {
 }
 
 // Background undo processor
-async function processUndo(jobId, snapshots, tokenState, db) {
+async function processUndo(jobId, undoItems, tokenState, db) {
   const updateJob = db.prepare(`
     UPDATE jobs SET updated = ?, failed = ?, status = ?, completed_at = CURRENT_TIMESTAMP
     WHERE id = ?
@@ -354,27 +382,41 @@ async function processUndo(jobId, snapshots, tokenState, db) {
   let updated = 0;
   let failed = 0;
 
-  for (const snapshot of snapshots) {
+  for (const item of undoItems) {
     try {
       const updates = {};
-      if (snapshot.old_price !== null) {
-        // Keep undo payload aligned with update payload contract.
-        updates.price = snapshot.old_price;
+
+      const priceChanged = item.new_price !== null && item.new_price !== undefined && item.new_price !== item.old_price;
+      const saleChanged = item.new_sale_price !== null && item.new_sale_price !== undefined && item.new_sale_price !== item.old_sale_price;
+      const costChanged = item.new_cost_price !== null && item.new_cost_price !== undefined && item.new_cost_price !== item.old_cost_price;
+      const quantityChanged = item.new_quantity !== null && item.new_quantity !== undefined && item.new_quantity !== item.old_quantity;
+
+      if (priceChanged && item.old_price !== null && item.old_price !== undefined) {
+        updates.price = item.old_price;
       }
-      if (snapshot.old_sale_price !== null && snapshot.old_sale_price !== undefined) {
-        updates.sale_price = snapshot.old_sale_price;
+      if (saleChanged) {
+        // When previous value is null, send 0 to clear sale price.
+        updates.sale_price = item.old_sale_price ?? 0;
       }
-      if (snapshot.old_cost_price !== null && snapshot.old_cost_price !== undefined) {
-        updates.cost_price = snapshot.old_cost_price;
+      if (costChanged) {
+        // When previous value is null, send 0 to clear cost price.
+        updates.cost_price = item.old_cost_price ?? 0;
       }
-      if (snapshot.old_quantity !== null) {
-        updates.quantity = snapshot.old_quantity;
+      if (quantityChanged && item.old_quantity !== null && item.old_quantity !== undefined) {
+        updates.quantity = item.old_quantity;
       }
 
-      await updateProductWithRetry(tokenState, snapshot.product_id, updates);
+      if (Object.keys(updates).length === 0) {
+        // Nothing reversible for this row (e.g., no old value available).
+        updated++;
+        activeJobs[jobId].updated = updated;
+        continue;
+      }
+
+      await updateProductWithRetry(tokenState, item.product_id, item.sku, updates);
       updated++;
     } catch (err) {
-      console.error('Undo item failed:', snapshot.sku, err.response?.data || err.message);
+      console.error('Undo item failed:', item.sku, err.response?.data || err.message);
       failed++;
     }
 
@@ -384,7 +426,7 @@ async function processUndo(jobId, snapshots, tokenState, db) {
     await sleep(RATE_LIMIT_DELAY);
   }
 
-  const finalStatus = failed === snapshots.length ? 'failed' : 'completed';
+  const finalStatus = failed === undoItems.length ? 'failed' : 'completed';
   updateJob.run(updated, failed, finalStatus, jobId);
   activeJobs[jobId].status = finalStatus;
 

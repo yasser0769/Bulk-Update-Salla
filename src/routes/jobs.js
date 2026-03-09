@@ -35,20 +35,25 @@ router.post('/start', requireAuth, async (req, res) => {
 
   // Save snapshot and job items
   const insertItem = db.prepare(`
-    INSERT INTO job_items (job_id, sku, product_id, product_name, old_price, new_price, old_quantity, new_quantity, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    INSERT INTO job_items (
+      job_id, sku, product_id, product_name,
+      old_price, new_price, old_sale_price, new_sale_price, old_cost_price, new_cost_price,
+      old_quantity, new_quantity, status
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
   `);
 
   const insertSnapshot = db.prepare(`
-    INSERT INTO snapshots (job_id, sku, product_id, old_price, old_quantity)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO snapshots (job_id, sku, product_id, old_price, old_sale_price, old_cost_price, old_quantity)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertAll = db.transaction(() => {
     itemsToUpdate.forEach(item => {
       insertItem.run(jobId, item.sku, item.productId, item.productName,
-        item.oldPrice, item.newPrice, item.oldQuantity, item.newQuantity);
-      insertSnapshot.run(jobId, item.sku, item.productId, item.oldPrice, item.oldQuantity);
+        item.oldPrice, item.newPrice, item.oldSalePrice, item.newSalePrice, item.oldCostPrice, item.newCostPrice,
+        item.oldQuantity, item.newQuantity);
+      insertSnapshot.run(jobId, item.sku, item.productId, item.oldPrice, item.oldSalePrice, item.oldCostPrice, item.oldQuantity);
     });
   });
 
@@ -134,7 +139,10 @@ router.get('/:id/status', requireAuth, (req, res) => {
   }
 
   const failedItems = db.prepare(`
-    SELECT sku, product_name, old_price, new_price, old_quantity, new_quantity, error_message
+    SELECT
+      sku, product_name,
+      old_price, new_price, old_sale_price, new_sale_price, old_cost_price, new_cost_price,
+      old_quantity, new_quantity, error_message
     FROM job_items
     WHERE job_id = ? AND status = 'failed'
   `).all(id);
@@ -205,10 +213,12 @@ router.get('/:id/results/download', requireAuth, (req, res) => {
   };
 
   const csvRows = [
-    ['SKU', 'اسم المنتج', 'السعر القديم', 'السعر الجديد', 'الكمية القديمة', 'الكمية الجديدة', 'الحالة', 'سبب الفشل'],
+    ['SKU', 'اسم المنتج', 'سعر المنتج القديم', 'سعر المنتج الجديد', 'سعر التخفيض القديم', 'سعر التخفيض الجديد', 'سعر التكلفة القديم', 'سعر التكلفة الجديد', 'الكمية القديمة', 'الكمية الجديدة', 'الحالة', 'سبب الفشل'],
     ...items.map(item => [
       item.sku, item.product_name,
       item.old_price ?? '', item.new_price ?? '',
+      item.old_sale_price ?? '', item.new_sale_price ?? '',
+      item.old_cost_price ?? '', item.new_cost_price ?? '',
       item.old_quantity ?? '', item.new_quantity ?? '',
       statusMap[item.status] || item.status,
       item.error_message || ''
@@ -244,6 +254,12 @@ async function processJob(jobId, items, accessToken) {
       if (item.newPrice !== null && item.newPrice !== undefined) {
         // Salla expects price as a number, not a nested amount object.
         updates.price = item.newPrice;
+      }
+      if (item.newSalePrice !== null && item.newSalePrice !== undefined) {
+        updates.sale_price = item.newSalePrice;
+      }
+      if (item.newCostPrice !== null && item.newCostPrice !== undefined) {
+        updates.cost_price = item.newCostPrice;
       }
       if (item.newQuantity !== null && item.newQuantity !== undefined) {
         updates.quantity = item.newQuantity;
@@ -288,6 +304,12 @@ async function processUndo(jobId, snapshots, accessToken, db) {
       if (snapshot.old_price !== null) {
         // Keep undo payload aligned with update payload contract.
         updates.price = snapshot.old_price;
+      }
+      if (snapshot.old_sale_price !== null && snapshot.old_sale_price !== undefined) {
+        updates.sale_price = snapshot.old_sale_price;
+      }
+      if (snapshot.old_cost_price !== null && snapshot.old_cost_price !== undefined) {
+        updates.cost_price = snapshot.old_cost_price;
       }
       if (snapshot.old_quantity !== null) {
         updates.quantity = snapshot.old_quantity;

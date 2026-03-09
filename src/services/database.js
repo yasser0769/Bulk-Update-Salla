@@ -39,6 +39,10 @@ function initDB() {
       product_name TEXT,
       old_price REAL,
       new_price REAL,
+      old_sale_price REAL,
+      new_sale_price REAL,
+      old_cost_price REAL,
+      new_cost_price REAL,
       old_quantity INTEGER,
       new_quantity INTEGER,
       status TEXT DEFAULT 'pending',
@@ -52,10 +56,20 @@ function initDB() {
       sku TEXT,
       product_id TEXT,
       old_price REAL,
+      old_sale_price REAL,
+      old_cost_price REAL,
       old_quantity INTEGER,
       FOREIGN KEY (job_id) REFERENCES jobs(id)
     );
   `);
+
+  // Backward-compatible migration for existing databases.
+  ensureColumn('job_items', 'old_sale_price', 'REAL');
+  ensureColumn('job_items', 'new_sale_price', 'REAL');
+  ensureColumn('job_items', 'old_cost_price', 'REAL');
+  ensureColumn('job_items', 'new_cost_price', 'REAL');
+  ensureColumn('snapshots', 'old_sale_price', 'REAL');
+  ensureColumn('snapshots', 'old_cost_price', 'REAL');
 
   console.log('Database initialized');
   return db;
@@ -67,6 +81,14 @@ function getDB() {
     db.pragma('journal_mode = WAL');
   }
   return db;
+}
+
+function ensureColumn(tableName, columnName, columnType) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const hasColumn = columns.some(col => col.name === columnName);
+  if (!hasColumn) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
+  }
 }
 
 module.exports = { initDB, getDB };

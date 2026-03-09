@@ -9,6 +9,33 @@ const { requireAuth } = require('../middleware/auth');
 const { parseFile, extractMappedData } = require('../services/fileParser');
 const { getAllProducts } = require('../services/salla');
 
+function extractAmount(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'string') {
+    const n = parseFloat(raw);
+    return Number.isNaN(n) ? null : n;
+  }
+  if (typeof raw === 'object') {
+    if (raw.amount !== undefined && raw.amount !== null) {
+      const n = parseFloat(raw.amount);
+      return Number.isNaN(n) ? null : n;
+    }
+    if (raw.value !== undefined && raw.value !== null) {
+      const n = parseFloat(raw.value);
+      return Number.isNaN(n) ? null : n;
+    }
+  }
+  return null;
+}
+
+function extractQuantity(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return raw;
+  const n = parseInt(String(raw), 10);
+  return Number.isNaN(n) ? null : n;
+}
+
 // Multer config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -73,7 +100,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
 
 // POST /api/products/preview - Apply column mapping and fetch products for comparison
 router.post('/preview', requireAuth, async (req, res) => {
-  const { skuCol, priceCol, quantityCol } = req.body;
+  const { skuCol, priceCol, salePriceCol, costPriceCol, quantityCol } = req.body;
 
   if (!skuCol) {
     return res.status(400).json({ error: 'يجب تحديد عمود SKU.' });
@@ -89,7 +116,7 @@ router.post('/preview', requireAuth, async (req, res) => {
     const { rows } = parseFile(fileInfo.path, fileInfo.originalName);
 
     // Extract mapped data
-    const mappedItems = extractMappedData(rows, { skuCol, priceCol, quantityCol });
+    const mappedItems = extractMappedData(rows, { skuCol, priceCol, salePriceCol, costPriceCol, quantityCol });
 
     if (mappedItems.length === 0) {
       return res.status(400).json({ error: 'لم يتم العثور على صفوف صالحة في الملف.' });
@@ -121,6 +148,10 @@ router.post('/preview', requireAuth, async (req, res) => {
           productName: '-',
           oldPrice: null,
           newPrice: item.newPrice ?? null,
+          oldSalePrice: null,
+          newSalePrice: item.newSalePrice ?? null,
+          oldCostPrice: null,
+          newCostPrice: item.newCostPrice ?? null,
           oldQuantity: null,
           newQuantity: item.newQuantity ?? null,
           status: 'not_found'
@@ -129,14 +160,20 @@ router.post('/preview', requireAuth, async (req, res) => {
       }
 
       matchedCount++;
-      const oldPrice = product.price?.amount ?? null;
-      const oldQuantity = product.quantity ?? null;
+      const oldPrice = extractAmount(product.price);
+      const oldSalePrice = extractAmount(product.sale_price);
+      const oldCostPrice = extractAmount(product.cost_price);
+      const oldQuantity = extractQuantity(product.quantity);
       const newPrice = item.newPrice ?? null;
+      const newSalePrice = item.newSalePrice ?? null;
+      const newCostPrice = item.newCostPrice ?? null;
       const newQuantity = item.newQuantity ?? null;
 
       const priceChanged = newPrice !== null && newPrice !== oldPrice;
+      const salePriceChanged = newSalePrice !== null && newSalePrice !== oldSalePrice;
+      const costPriceChanged = newCostPrice !== null && newCostPrice !== oldCostPrice;
       const quantityChanged = newQuantity !== null && newQuantity !== oldQuantity;
-      const willUpdate = priceChanged || quantityChanged;
+      const willUpdate = priceChanged || salePriceChanged || costPriceChanged || quantityChanged;
 
       if (willUpdate) {
         willUpdateCount++;
@@ -150,6 +187,10 @@ router.post('/preview', requireAuth, async (req, res) => {
         productName: product.name,
         oldPrice,
         newPrice,
+        oldSalePrice,
+        newSalePrice,
+        oldCostPrice,
+        newCostPrice,
         oldQuantity,
         newQuantity,
         status: willUpdate ? 'will_update' : 'no_change'
@@ -158,7 +199,7 @@ router.post('/preview', requireAuth, async (req, res) => {
 
     // Store preview data in session
     req.session.previewData = {
-      mapping: { skuCol, priceCol, quantityCol },
+      mapping: { skuCol, priceCol, salePriceCol, costPriceCol, quantityCol },
       stats: {
         totalRows: mappedItems.length,
         matched: matchedCount,
@@ -195,12 +236,16 @@ router.get('/preview/download', requireAuth, (req, res) => {
   };
 
   const csvRows = [
-    ['SKU', 'اسم المنتج', 'السعر الحالي', 'السعر الجديد', 'الكمية الحالية', 'الكمية الجديدة', 'الحالة'],
+    ['SKU', 'اسم المنتج', 'سعر المنتج الحالي', 'سعر المنتج الجديد', 'سعر التخفيض الحالي', 'سعر التخفيض الجديد', 'سعر التكلفة الحالي', 'سعر التكلفة الجديد', 'الكمية الحالية', 'الكمية الجديدة', 'الحالة'],
     ...items.map(item => [
       item.sku,
       item.productName,
       item.oldPrice ?? '',
       item.newPrice ?? '',
+      item.oldSalePrice ?? '',
+      item.newSalePrice ?? '',
+      item.oldCostPrice ?? '',
+      item.newCostPrice ?? '',
       item.oldQuantity ?? '',
       item.newQuantity ?? '',
       statusMap[item.status] || item.status

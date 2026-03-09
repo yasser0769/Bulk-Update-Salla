@@ -39,8 +39,12 @@
               <tr>
                 <th>SKU</th>
                 <th>اسم المنتج</th>
-                <th>السعر القديم</th>
-                <th>السعر المطلوب</th>
+                <th>سعر المنتج القديم</th>
+                <th>سعر المنتج المطلوب</th>
+                <th>سعر التخفيض القديم</th>
+                <th>سعر التخفيض المطلوب</th>
+                <th>سعر التكلفة القديم</th>
+                <th>سعر التكلفة المطلوب</th>
                 <th>الكمية القديمة</th>
                 <th>الكمية المطلوبة</th>
                 <th>سبب الفشل</th>
@@ -138,6 +142,10 @@
           <td>${esc(item.product_name || '-')}</td>
           <td>${App.formatPrice(item.old_price)}</td>
           <td>${App.formatPrice(item.new_price)}</td>
+          <td>${App.formatPrice(item.old_sale_price)}</td>
+          <td>${App.formatPrice(item.new_sale_price)}</td>
+          <td>${App.formatPrice(item.old_cost_price)}</td>
+          <td>${App.formatPrice(item.new_cost_price)}</td>
           <td>${App.formatNumber(item.old_quantity)}</td>
           <td>${App.formatNumber(item.new_quantity)}</td>
           <td><span class="badge badge-danger">${esc(item.error_message || 'خطأ غير معروف')}</span></td>

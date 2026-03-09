@@ -31,7 +31,7 @@
     <div class="card">
       <div class="card-header">
         <h1 class="card-title">معاينة التغييرات</h1>
-        <p class="card-subtitle">راجع التغييرات قبل التنفيذ. يتم عرض أول 50 منتج فقط في هذه الصفحة.</p>
+        <p class="card-subtitle">راجع تغييرات الأسعار (المنتج/التخفيض/التكلفة) والكمية قبل التنفيذ. يتم عرض أول 50 منتج فقط في هذه الصفحة.</p>
       </div>
 
       <!-- Stats Grid -->
@@ -54,15 +54,19 @@
               <th>#</th>
               <th>SKU</th>
               <th>اسم المنتج</th>
-              <th>السعر الحالي</th>
-              <th>السعر الجديد</th>
+              <th>سعر المنتج الحالي</th>
+              <th>سعر المنتج الجديد</th>
+              <th>سعر التخفيض الحالي</th>
+              <th>سعر التخفيض الجديد</th>
+              <th>سعر التكلفة الحالي</th>
+              <th>سعر التكلفة الجديد</th>
               <th>الكمية الحالية</th>
               <th>الكمية الجديدة</th>
               <th>الحالة</th>
             </tr>
           </thead>
           <tbody id="previewTableBody">
-            <tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">جاري التحميل...</td></tr>
+            <tr><td colspan="12" style="text-align:center; padding:32px; color:#64748B;">جاري التحميل...</td></tr>
           </tbody>
         </table>
       </div>
@@ -125,7 +129,7 @@
   const tbody = document.getElementById('previewTableBody');
 
   if (!previewItems || previewItems.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state">
       <span class="empty-state-icon">📭</span>
       <p class="empty-state-title">لا توجد بيانات للعرض</p>
     </div></td></tr>`;
@@ -133,16 +137,22 @@
     tbody.innerHTML = previewItems.map((item, i) => {
       const rowClass = `row-${item.status}`;
 
-      const priceCell = renderValueCell(item.oldPrice, item.newPrice);
-      const qtyCell   = renderValueCell(item.oldQuantity, item.newQuantity, false);
+      const basePriceCell = renderValueCell(item.oldPrice, item.newPrice);
+      const salePriceCell = renderValueCell(item.oldSalePrice, item.newSalePrice);
+      const costPriceCell = renderValueCell(item.oldCostPrice, item.newCostPrice);
+      const qtyCell = renderValueCell(item.oldQuantity, item.newQuantity, false);
 
       return `
         <tr class="${rowClass}">
           <td style="color:#94A3B8; font-size:12px;">${i + 1}</td>
           <td><code style="font-size:12px; background:#F1F5F9; padding:2px 6px; border-radius:4px;">${esc(item.sku)}</code></td>
           <td>${item.productName === '-' ? '<span style="color:#94A3B8">—</span>' : esc(item.productName)}</td>
-          <td>${priceCell.old}</td>
-          <td>${priceCell.new}</td>
+          <td>${basePriceCell.old}</td>
+          <td>${basePriceCell.new}</td>
+          <td>${salePriceCell.old}</td>
+          <td>${salePriceCell.new}</td>
+          <td>${costPriceCell.old}</td>
+          <td>${costPriceCell.new}</td>
           <td>${qtyCell.old}</td>
           <td>${qtyCell.new}</td>
           <td>${App.statusBadge(item.status)}</td>

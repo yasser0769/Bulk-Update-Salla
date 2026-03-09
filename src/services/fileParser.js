@@ -55,24 +55,41 @@ function parseExcel(filePath) {
 }
 
 function extractMappedData(rows, mapping) {
-  const { skuCol, priceCol, quantityCol } = mapping;
+  const { skuCol, priceCol, salePriceCol, costPriceCol, quantityCol } = mapping;
 
   return rows.map((row, index) => {
     const sku = String(row[skuCol] || '').trim();
     const item = { rowIndex: index + 2, sku };
 
     if (priceCol && row[priceCol] !== undefined && row[priceCol] !== '') {
-      const price = parseFloat(String(row[priceCol]).replace(/[^0-9.]/g, ''));
+      const price = parseDecimal(row[priceCol]);
       if (!isNaN(price)) item.newPrice = price;
     }
 
+    if (salePriceCol && row[salePriceCol] !== undefined && row[salePriceCol] !== '') {
+      const salePrice = parseDecimal(row[salePriceCol]);
+      if (!isNaN(salePrice)) item.newSalePrice = salePrice;
+    }
+
+    if (costPriceCol && row[costPriceCol] !== undefined && row[costPriceCol] !== '') {
+      const costPrice = parseDecimal(row[costPriceCol]);
+      if (!isNaN(costPrice)) item.newCostPrice = costPrice;
+    }
+
     if (quantityCol && row[quantityCol] !== undefined && row[quantityCol] !== '') {
-      const qty = parseInt(String(row[quantityCol]).replace(/[^0-9]/g, ''), 10);
+      const qty = parseInt(String(row[quantityCol]).replace(/[^0-9-]/g, ''), 10);
       if (!isNaN(qty)) item.newQuantity = qty;
     }
 
     return item;
   }).filter(item => item.sku);
+}
+
+function parseDecimal(value) {
+  const normalized = String(value)
+    .replace(/,/g, '.')
+    .replace(/[^0-9.-]/g, '');
+  return parseFloat(normalized);
 }
 
 module.exports = { parseFile, extractMappedData };

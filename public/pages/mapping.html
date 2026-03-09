@@ -77,12 +77,30 @@
     },
     {
       key: 'priceCol',
-      label: 'السعر',
+      label: 'سعر المنتج',
       required: false,
       icon: '💰',
       iconClass: 'optional-icon',
-      hint: 'السعر الجديد للمنتج (رقم عشري)',
-      placeholder: 'اختر عمود السعر (اختياري)'
+      hint: 'سعر البيع الأساسي الجديد (رقم عشري)',
+      placeholder: 'اختر عمود سعر المنتج (اختياري)'
+    },
+    {
+      key: 'salePriceCol',
+      label: 'سعر التخفيض',
+      required: false,
+      icon: '🏷️',
+      iconClass: 'optional-icon',
+      hint: 'سعر التخفيض/العرض الجديد (رقم عشري)',
+      placeholder: 'اختر عمود سعر التخفيض (اختياري)'
+    },
+    {
+      key: 'costPriceCol',
+      label: 'سعر التكلفة',
+      required: false,
+      icon: '📉',
+      iconClass: 'optional-icon',
+      hint: 'سعر تكلفة المنتج الجديد (رقم عشري)',
+      placeholder: 'اختر عمود سعر التكلفة (اختياري)'
     },
     {
       key: 'quantityCol',
@@ -126,21 +144,27 @@
   autoDetect();
 
   function autoDetect() {
-    const skuKeywords = ['sku', 'رمز', 'كود', 'code', 'barcode', 'باركود', 'رقم'];
-    const priceKeywords = ['سعر', 'price', 'سعر البيع', 'cost', 'تكلفة'];
+    const taken = new Set();
+    const skuKeywords = ['sku', 'رمز', 'كود', 'code', 'barcode', 'باركود'];
+    const priceKeywords = ['price', 'regular price', 'selling', 'سعر البيع', 'السعر'];
+    const salePriceKeywords = ['sale', 'discount', 'special', 'offer', 'سعر التخفيض', 'تخفيض', 'خصم'];
+    const costPriceKeywords = ['cost', 'purchase', 'buy price', 'سعر التكلفة', 'تكلفة'];
     const qtyKeywords = ['كمية', 'quantity', 'qty', 'stock', 'مخزون', 'العدد'];
 
-    autoSelectField('skuCol', skuKeywords);
-    autoSelectField('priceCol', priceKeywords);
-    autoSelectField('quantityCol', qtyKeywords);
+    autoSelectField('skuCol', skuKeywords, taken);
+    autoSelectField('priceCol', priceKeywords, taken);
+    autoSelectField('salePriceCol', salePriceKeywords, taken);
+    autoSelectField('costPriceCol', costPriceKeywords, taken);
+    autoSelectField('quantityCol', qtyKeywords, taken);
   }
 
-  function autoSelectField(fieldId, keywords) {
+  function autoSelectField(fieldId, keywords, taken) {
     const select = document.getElementById(fieldId);
     for (const header of headers) {
       const lower = header.toLowerCase();
-      if (keywords.some(kw => lower.includes(kw))) {
+      if (!taken.has(header) && keywords.some(kw => lower.includes(kw))) {
         select.value = header;
+        taken.add(header);
         updateSample(fieldId);
         break;
       }
@@ -155,7 +179,9 @@
     if (!col) {
       const defaultHints = {
         skuCol: 'رقم/كود المنتج الفريد (Stock Keeping Unit)',
-        priceCol: 'السعر الجديد للمنتج (رقم عشري)',
+        priceCol: 'سعر البيع الأساسي الجديد (رقم عشري)',
+        salePriceCol: 'سعر التخفيض/العرض الجديد (رقم عشري)',
+        costPriceCol: 'سعر تكلفة المنتج الجديد (رقم عشري)',
         quantityCol: 'الكمية الجديدة للمنتج (رقم صحيح)'
       };
       hintEl.textContent = defaultHints[fieldId] || '';
@@ -173,6 +199,8 @@
   async function goToPreview() {
     const skuCol = document.getElementById('skuCol').value;
     const priceCol = document.getElementById('priceCol').value;
+    const salePriceCol = document.getElementById('salePriceCol').value;
+    const costPriceCol = document.getElementById('costPriceCol').value;
     const quantityCol = document.getElementById('quantityCol').value;
 
     // Validate
@@ -182,9 +210,9 @@
       return;
     }
 
-    if (!priceCol && !quantityCol) {
+    if (!priceCol && !salePriceCol && !costPriceCol && !quantityCol) {
       document.getElementById('validationArea').innerHTML =
-        '<div class="alert alert-warning"><span class="alert-icon">⚠️</span><div>يجب اختيار عمود السعر أو الكمية أو كليهما.</div></div>';
+        '<div class="alert alert-warning"><span class="alert-icon">⚠️</span><div>يجب اختيار عمود واحد على الأقل من: سعر المنتج أو سعر التخفيض أو سعر التكلفة أو الكمية.</div></div>';
       return;
     }
 
@@ -195,11 +223,15 @@
 
     try {
       const result = await App.api('POST', '/api/products/preview', {
-        skuCol, priceCol: priceCol || null, quantityCol: quantityCol || null
+        skuCol,
+        priceCol: priceCol || null,
+        salePriceCol: salePriceCol || null,
+        costPriceCol: costPriceCol || null,
+        quantityCol: quantityCol || null
       });
 
       App.save('previewData', result);
-      App.save('mapping', { skuCol, priceCol, quantityCol });
+      App.save('mapping', { skuCol, priceCol, salePriceCol, costPriceCol, quantityCol });
 
       window.location.href = '/pages/preview.html';
     } catch (err) {

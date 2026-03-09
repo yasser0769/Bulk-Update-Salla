@@ -13,20 +13,20 @@
   <main class="main-content">
     <div id="stepper-slot"></div>
 
-    <div class="card">
-      <div class="card-header">
+    <div class="card mapping-card">
+      <div class="card-header mapping-title-wrap">
         <h1 class="card-title">تحديد الأعمدة في الملف</h1>
-        <p class="card-subtitle">اختر العمود الذي يحتوي على كل نوع من بيانات المنتج.</p>
+        <p class="card-subtitle">طابق أعمدة ملفك مع الحقول الصحيحة. عمود SKU مطلوب للتعرّف على المنتجات.</p>
       </div>
 
       <!-- File summary -->
-      <div id="fileSummary" class="alert alert-info" style="margin-bottom:24px;">
-        <span class="alert-icon">📄</span>
+      <div id="fileSummary" class="alert alert-info file-summary-chip">
+        <span class="alert-icon">📊</span>
         <span id="fileSummaryText">جاري التحميل...</span>
       </div>
 
       <!-- Mapping Fields -->
-      <div class="mapping-grid" id="mappingGrid">
+      <div class="mapping-list" id="mappingGrid">
         <!-- Will be rendered by JS -->
       </div>
 
@@ -34,13 +34,9 @@
 
       <!-- Footer Actions -->
       <div class="footer-actions">
-        <a href="/pages/upload.html" class="btn btn-ghost">
-          <span style="font-size:16px;">→</span>
-          رجوع
-        </a>
+        <a href="/pages/upload.html" class="btn btn-ghost">رجوع</a>
         <button class="btn btn-primary btn-lg" id="nextBtn" onclick="goToPreview()">
-          التالي — معاينة التغييرات
-          <span style="font-size:16px;">←</span>
+          متابعة
         </button>
       </div>
     </div>
@@ -64,7 +60,7 @@
   document.getElementById('fileSummaryText').textContent =
     `الملف: ${filename} — ${totalRows.toLocaleString('ar-SA')} صف — ${headers.length} عمود`;
 
-  // Build mapping grid
+  // Build mapping rows
   const fields = [
     {
       key: 'skuCol',
@@ -115,27 +111,27 @@
 
   const grid = document.getElementById('mappingGrid');
   grid.innerHTML = fields.map(field => `
-    <div class="mapping-field">
-      <div class="mapping-field-header">
-        <div class="mapping-field-icon ${field.iconClass}">${field.icon}</div>
-        <div>
-          <div class="mapping-field-title">
-            ${field.label}
-            ${field.required
-              ? '<span class="badge badge-danger" style="font-size:10px; margin-right:6px;">إجباري</span>'
-              : '<span class="badge badge-gray" style="font-size:10px; margin-right:6px;">اختياري</span>'
-            }
-          </div>
+    <div class="mapping-row">
+      <div class="mapping-source">
+        <div class="mapping-field-title">
+          ${field.label}
+          ${field.required
+            ? '<span class="mapping-pill mapping-pill-required">إجباري</span>'
+            : '<span class="mapping-pill mapping-pill-optional">اختياري</span>'
+          }
         </div>
       </div>
 
-      <select class="form-select" id="${field.key}" onchange="updateSample('${field.key}')">
-        <option value="">${field.placeholder}</option>
-        ${headers.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('')}
-      </select>
+      <div class="mapping-arrow" aria-hidden="true">←</div>
 
-      <div class="form-hint" id="${field.key}_hint">
-        ${field.hint}
+      <div class="mapping-target">
+        <select class="form-select" id="${field.key}" onchange="updateSample('${field.key}')">
+          <option value="">— تخطي —</option>
+          ${headers.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('')}
+        </select>
+        <div class="form-hint mapping-hint" id="${field.key}_hint">
+          ${field.placeholder}
+        </div>
       </div>
     </div>
   `).join('');

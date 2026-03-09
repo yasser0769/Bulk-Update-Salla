@@ -778,3 +778,390 @@ tbody tr:hover {
     justify-content: center;
   }
 }
+
+/* ========================================
+   Design Refresh (RTL)
+   ======================================== */
+:root {
+  --salla-primary: #2f9b8f;
+  --salla-primary-dark: #23796f;
+  --salla-secondary: #111827;
+  --salla-gray: #657482;
+  --salla-light: #f4f7f8;
+  --salla-border: #d6e0e3;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --shadow-sm: 0 6px 24px rgba(16, 24, 40, 0.05);
+}
+
+body {
+  background: radial-gradient(circle at top left, #eef5f5 0%, #f7f9fa 55%, #f5f7f8 100%);
+  color: var(--salla-secondary);
+}
+
+.app-header {
+  height: 72px;
+  padding: 0;
+  box-shadow: none;
+  border-bottom: 1px solid var(--salla-border);
+  background: color-mix(in srgb, #ffffff 88%, #f0f6f6 12%);
+  backdrop-filter: blur(8px);
+}
+
+.app-header-inner {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-logo {
+  color: var(--salla-secondary);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+
+.app-logo-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--salla-primary);
+  background: color-mix(in srgb, var(--salla-primary) 12%, #ffffff 88%);
+}
+
+.app-logo-mark svg {
+  width: 20px;
+  height: 20px;
+}
+
+.header-actions {
+  gap: 10px;
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  color: #364152;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  transition: 0.18s ease;
+}
+
+.nav-btn:hover {
+  background: #eef4f5;
+  color: #111827;
+}
+
+.nav-btn-active {
+  color: var(--salla-primary-dark);
+  background: color-mix(in srgb, var(--salla-primary) 16%, #ffffff 84%);
+}
+
+.nav-btn-ghost {
+  border-color: var(--salla-border);
+  color: #5d6b78;
+}
+
+.main-content {
+  max-width: 1120px;
+  padding-top: 28px;
+}
+
+.stepper {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 4px auto 30px;
+  width: min(860px, 100%);
+  overflow: visible;
+  gap: 8px;
+}
+
+.step {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.step-circle {
+  width: 42px;
+  height: 42px;
+  border: 2px solid #dbe5e8;
+  background: #edf2f4;
+  color: #6a7b88;
+  font-size: 16px;
+}
+
+.step-label {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #728492;
+}
+
+.step-line {
+  height: 3px;
+  margin: 0 10px;
+  border-radius: 999px;
+  background: #dbe5e8;
+}
+
+.step.active .step-circle {
+  background: var(--salla-primary);
+  border-color: var(--salla-primary);
+  color: #fff;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--salla-primary) 20%, transparent);
+}
+
+.step.active .step-label {
+  color: var(--salla-primary-dark);
+}
+
+.step.completed .step-circle {
+  background: var(--salla-primary);
+  border-color: var(--salla-primary);
+  color: #fff;
+}
+
+.step.completed .step-line {
+  background: var(--salla-primary);
+}
+
+.card {
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--salla-border);
+  padding: 28px;
+}
+
+.mapping-card {
+  width: min(900px, 100%);
+  margin: 0 auto;
+}
+
+.mapping-title-wrap {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.card-title {
+  font-size: 38px;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+
+.card-subtitle {
+  font-size: 24px;
+  color: #5f6f7d;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.file-summary-chip {
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 14px;
+  margin-bottom: 18px;
+  background: #eef6ff;
+}
+
+.mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: 1.2fr auto 1.8fr;
+  gap: 16px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d9e5e7;
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.mapping-source {
+  min-width: 0;
+}
+
+.mapping-field-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mapping-pill {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mapping-pill-required {
+  color: #8b1f1f;
+  background: #fee2e2;
+}
+
+.mapping-pill-optional {
+  color: #4f5f6d;
+  background: #eaf0f3;
+}
+
+.mapping-arrow {
+  color: #7c8b96;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.mapping-target .form-select {
+  height: 50px;
+  border-radius: 14px;
+  border-color: #cbd8db;
+  background: #f9fcfc;
+  font-weight: 600;
+}
+
+.mapping-target .form-select:focus {
+  border-color: color-mix(in srgb, var(--salla-primary) 60%, #cbd8db);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--salla-primary) 16%, transparent);
+}
+
+.mapping-hint {
+  margin-top: 8px;
+  background: #f3f8f9;
+  border-right: none;
+  color: #62707b;
+}
+
+.footer-actions {
+  border-top: none;
+  margin-top: 20px;
+  padding-top: 4px;
+}
+
+.btn {
+  border-radius: 14px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.btn-lg {
+  min-height: 50px;
+  padding: 0 30px;
+}
+
+.btn-primary {
+  background: var(--salla-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--salla-primary-dark);
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  border-color: #cfdce0;
+  color: #465567;
+  background: #fff;
+}
+
+.toast-container {
+  top: auto;
+  bottom: 20px;
+  right: 20px;
+  left: auto;
+}
+
+@media (max-width: 1024px) {
+  .app-logo {
+    font-size: 26px;
+  }
+
+  .card-title {
+    font-size: 32px;
+  }
+
+  .card-subtitle {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    height: auto;
+    padding: 8px 0;
+  }
+
+  .app-header-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .app-logo {
+    justify-content: center;
+    font-size: 22px;
+  }
+
+  .header-actions {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .stepper {
+    margin-bottom: 20px;
+  }
+
+  .step-label {
+    font-size: 11px;
+  }
+
+  .mapping-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .mapping-arrow {
+    display: none;
+  }
+
+  .mapping-field-title {
+    font-size: 20px;
+  }
+
+  .card-title {
+    font-size: 26px;
+  }
+
+  .card-subtitle {
+    font-size: 17px;
+  }
+}

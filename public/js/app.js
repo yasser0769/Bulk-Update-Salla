@@ -108,18 +108,27 @@ const App = {
 
   // ---- Header HTML ----
   header(title) {
+    const path = window.location.pathname || '';
+    const isHistory = path.includes('/pages/history.html');
+
     return `
       <header class="app-header">
-        <a href="/pages/upload.html" class="app-logo">
-          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="8" fill="#5B8DEF"/>
-            <path d="M8 22h16M8 16l4-4 4 4 4-8 4 8" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          تحديث جماعي - سلة
-        </a>
-        <div class="header-actions">
-          <a href="/pages/history.html" class="btn btn-ghost btn-sm">السجل</a>
-          <a href="/auth/logout" class="btn btn-ghost btn-sm">تسجيل الخروج</a>
+        <div class="app-header-inner">
+          <a href="/pages/upload.html" class="app-logo">
+            <span class="app-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14 2v4a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8.5 13h2M13.5 13h2M8.5 17h2M13.5 17h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span>محدث سلة الجماعي</span>
+          </a>
+          <nav class="header-actions" aria-label="التنقل الرئيسي">
+            <a href="/pages/upload.html" class="nav-btn ${!isHistory ? 'nav-btn-active' : ''}">التحديث</a>
+            <a href="/pages/history.html" class="nav-btn ${isHistory ? 'nav-btn-active' : ''}">السجل</a>
+            <a href="/auth/logout" class="nav-btn nav-btn-ghost">خروج</a>
+          </nav>
         </div>
       </header>`;
   },
@@ -137,9 +146,11 @@ const App = {
     return `<div class="stepper">
       ${steps.map((s, i) => `
         <div class="step ${s.n < activeStep ? 'completed' : s.n === activeStep ? 'active' : ''}">
-          <div class="step-circle">${s.n < activeStep ? '✓' : s.n}</div>
+          <div class="step-head">
+            <div class="step-circle">${s.n < activeStep ? '✓' : s.n}</div>
+            ${i < steps.length - 1 ? '<div class="step-line"></div>' : ''}
+          </div>
           <span class="step-label">${s.label}</span>
-          ${i < steps.length - 1 ? '<div class="step-line"></div>' : ''}
         </div>
       `).join('')}
     </div>`;

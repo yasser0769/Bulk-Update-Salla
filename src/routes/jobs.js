@@ -35,10 +35,14 @@ async function refreshAccessToken(refreshToken) {
 }
 
 async function updateProductWithRetry(tokenState, productId, sku, updates) {
-  const runUpdate = async () => {
+  const runById = async () => {
     if (productId) {
       return updateProduct(tokenState.accessToken, productId, updates);
     }
+    return null;
+  };
+
+  const runBySku = async () => {
     if (sku) {
       return updateProductBySKU(tokenState.accessToken, sku, updates);
     }
@@ -46,7 +50,9 @@ async function updateProductWithRetry(tokenState, productId, sku, updates) {
   };
 
   try {
-    return await runUpdate();
+    const byId = await runById();
+    if (byId) return byId;
+    return await runBySku();
   } catch (err) {
     const status = err.response?.status;
 
@@ -55,12 +61,20 @@ async function updateProductWithRetry(tokenState, productId, sku, updates) {
       tokenState.accessToken = refreshed.accessToken;
       tokenState.refreshToken = refreshed.refreshToken;
       tokenState.tokenExpiry = refreshed.tokenExpiry;
-      return await runUpdate();
+      const byId = await runById();
+      if (byId) return byId;
+      return await runBySku();
     }
 
     if (status === 429) {
       await sleep(2000);
-      return await runUpdate();
+      const byId = await runById();
+      if (byId) return byId;
+      return await runBySku();
+    }
+
+    if ((status === 404 || status === 422) && sku) {
+      return await runBySku();
     }
 
     throw err;
@@ -394,13 +408,11 @@ async function processUndo(jobId, undoItems, tokenState, db) {
       if (priceChanged && item.old_price !== null && item.old_price !== undefined) {
         updates.price = item.old_price;
       }
-      if (saleChanged) {
-        // When previous value is null, send 0 to clear sale price.
-        updates.sale_price = item.old_sale_price ?? 0;
+      if (saleChanged && item.old_sale_price !== null && item.old_sale_price !== undefined) {
+        updates.sale_price = item.old_sale_price;
       }
-      if (costChanged) {
-        // When previous value is null, send 0 to clear cost price.
-        updates.cost_price = item.old_cost_price ?? 0;
+      if (costChanged && item.old_cost_price !== null && item.old_cost_price !== undefined) {
+        updates.cost_price = item.old_cost_price;
       }
       if (quantityChanged && item.old_quantity !== null && item.old_quantity !== undefined) {
         updates.quantity = item.old_quantity;

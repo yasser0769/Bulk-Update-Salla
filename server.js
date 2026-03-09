@@ -12,6 +12,9 @@ const { initDB } = require('./src/services/database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Railway/Reverse proxies need trust proxy so secure cookies work correctly.
+app.set('trust proxy', 1);
+
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {

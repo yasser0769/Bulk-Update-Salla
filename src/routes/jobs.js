@@ -134,7 +134,8 @@ router.get('/:id/status', requireAuth, (req, res) => {
   }
 
   const failedItems = db.prepare(`
-    SELECT sku, error_message FROM job_items
+    SELECT sku, product_name, old_price, new_price, old_quantity, new_quantity, error_message
+    FROM job_items
     WHERE job_id = ? AND status = 'failed'
   `).all(id);
 
@@ -241,7 +242,8 @@ async function processJob(jobId, items, accessToken) {
     try {
       const updates = {};
       if (item.newPrice !== null && item.newPrice !== undefined) {
-        updates.price = { amount: item.newPrice };
+        // Salla expects price as a number, not a nested amount object.
+        updates.price = item.newPrice;
       }
       if (item.newQuantity !== null && item.newQuantity !== undefined) {
         updates.quantity = item.newQuantity;
@@ -284,7 +286,8 @@ async function processUndo(jobId, snapshots, accessToken, db) {
     try {
       const updates = {};
       if (snapshot.old_price !== null) {
-        updates.price = { amount: snapshot.old_price };
+        // Keep undo payload aligned with update payload contract.
+        updates.price = snapshot.old_price;
       }
       if (snapshot.old_quantity !== null) {
         updates.quantity = snapshot.old_quantity;

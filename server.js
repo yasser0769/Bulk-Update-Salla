@@ -11,6 +11,8 @@ const { initDB } = require('./src/services/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === 'production';
+const cookieSameSite = process.env.SESSION_SAME_SITE || (isProduction ? 'none' : 'lax');
 
 // Railway/Reverse proxies need trust proxy so secure cookies work correctly.
 app.set('trust proxy', 1);
@@ -31,7 +33,9 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
+    sameSite: cookieSameSite,
+    httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
@@ -43,10 +47,20 @@ app.use('/api/jobs', jobsRoutes);
 
 // Serve main app
 app.get('/', (req, res) => {
+  if (req.query.token) {
+    const params = new URLSearchParams(req.query);
+    return res.redirect(`/embedded?${params.toString()}`);
+  }
+
   if (!req.session.accessToken) {
     return res.redirect('/auth/login');
   }
   res.redirect('/pages/upload.html');
+});
+
+// Dedicated URL for Salla Embedded Pages iframe
+app.get('/embedded', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/pages/upload.html'));
 });
 
 // Health check

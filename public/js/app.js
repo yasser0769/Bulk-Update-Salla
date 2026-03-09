@@ -68,6 +68,115 @@ const App = {
     } catch { return null; }
   },
 
+  // ---- Script Loader ----
+  _scriptPromises: {},
+  loadScriptOnce(src) {
+    if (this._scriptPromises[src]) return this._scriptPromises[src];
+
+    this._scriptPromises[src] = new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if (existing) {
+        resolve();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load script: ' + src));
+      document.head.appendChild(script);
+    });
+
+    return this._scriptPromises[src];
+  },
+
+  // ---- Embedded SDK Bootstrap ----
+  _embeddedInitPromise: null,
+  initEmbedded() {
+    if (this._embeddedInitPromise) return this._embeddedInitPromise;
+    this._embeddedInitPromise = this._initEmbeddedInternal();
+    return this._embeddedInitPromise;
+  },
+
+  async _initEmbeddedInternal() {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromQuery = params.get('token');
+    const lang = params.get('lang');
+    const theme = params.get('theme');
+    let isIframe = false;
+
+    try {
+      isIframe = window.self !== window.top;
+    } catch {
+      isIframe = true;
+    }
+
+    if (!isIframe && !tokenFromQuery) {
+      return { enabled: false };
+    }
+
+    try {
+      await this.loadScriptOnce('https://unpkg.com/@salla.sa/embedded-sdk/dist/umd/index.js');
+      const embedded = window.Salla?.embedded;
+      if (!embedded) return { enabled: false };
+
+      const initResult = await embedded.init({ debug: false });
+      const token = embedded.auth?.getToken?.() || tokenFromQuery;
+      const appId = embedded.auth?.getAppId?.() || params.get('app_id') || params.get('appId');
+
+      if (lang) {
+        document.documentElement.lang = lang;
+        if (lang === 'ar') document.documentElement.dir = 'rtl';
+        if (lang === 'en') document.documentElement.dir = 'ltr';
+      }
+
+      if (theme) {
+        document.documentElement.dataset.sallaTheme = theme;
+      }
+
+      if (!token) {
+        embedded.ready?.();
+        return { enabled: true, verified: false, reason: 'missing-token' };
+      }
+
+      const verifyRes = await fetch('/auth/embedded/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, appId })
+      });
+      const verifyJson = await verifyRes.json().catch(() => ({}));
+
+      if (!verifyRes.ok || !verifyJson.success) {
+        embedded.destroy?.();
+        return { enabled: true, verified: false, reason: 'verify-failed' };
+      }
+
+      if (embedded.page?.setTitle) {
+        embedded.page.setTitle(document.title);
+      }
+      if (embedded.page?.autoResize) {
+        embedded.page.autoResize();
+      }
+      embedded.ready?.();
+
+      if (!verifyJson.authenticated) {
+        this.toast('تم التحقق داخل سلة. سجّل الدخول مرة واحدة لربط المتجر قبل رفع الملفات.', 'warning', 7000);
+      }
+
+      return {
+        enabled: true,
+        verified: true,
+        merchantId: verifyJson.merchantId || null,
+        authenticated: !!verifyJson.authenticated,
+        layout: initResult?.layout || null
+      };
+    } catch (err) {
+      console.error('Embedded bootstrap failed:', err);
+      return { enabled: false, error: err.message };
+    }
+  },
+
   // ---- Stepper Update ----
   setActiveStep(stepNumber) {
     document.querySelectorAll('.step').forEach((step, index) => {
@@ -156,3 +265,7 @@ const App = {
     </div>`;
   }
 };
+
+window.addEventListener('DOMContentLoaded', () => {
+  App.initEmbedded();
+});

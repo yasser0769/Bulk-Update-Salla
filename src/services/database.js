@@ -61,6 +61,15 @@ function initDB() {
       old_quantity INTEGER,
       FOREIGN KEY (job_id) REFERENCES jobs(id)
     );
+
+    CREATE TABLE IF NOT EXISTS merchant_tokens (
+      merchant_id TEXT PRIMARY KEY,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      token_expiry INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Backward-compatible migration for existing databases.
@@ -70,6 +79,9 @@ function initDB() {
   ensureColumn('job_items', 'new_cost_price', 'REAL');
   ensureColumn('snapshots', 'old_sale_price', 'REAL');
   ensureColumn('snapshots', 'old_cost_price', 'REAL');
+  ensureColumn('merchant_tokens', 'refresh_token', 'TEXT');
+  ensureColumn('merchant_tokens', 'token_expiry', 'INTEGER');
+  ensureColumn('merchant_tokens', 'updated_at', 'DATETIME');
 
   console.log('Database initialized');
   return db;
